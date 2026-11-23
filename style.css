@@ -41,7 +41,8 @@ body.reset-flash-effect {
 
 #reset-btn,
 #mines-counter,
-#sound-btn {
+#sound-btn,
+#player-name {
   height: 36px;
   margin: 0;
   box-sizing: border-box;
@@ -54,6 +55,23 @@ body.reset-flash-effect {
   border-radius: 5px;
   font-weight: bold;
   user-select: none;
+}
+
+#player-name {
+  padding: 0 10px;
+  font-size: 14px;
+  width: 130px;
+  outline: none;
+  transition: background-color 0.3s ease;
+}
+
+#player-name::placeholder {
+  color: #95a5a6;
+}
+
+#player-name:focus {
+  background-color: #415b76;
+  border: 1px solid #ecf0f1;
 }
 
 #reset-btn {

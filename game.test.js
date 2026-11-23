@@ -6,6 +6,7 @@ import {
   checkWinModel,
   isValidGameState,
   MINE_COUNT,
+  openCellModel,
 } from './game-logic.js';
 
 test('тест 1: создание поля размером 9 на 9', function () {
@@ -95,4 +96,24 @@ test('тест 6: проверка данных сохранения', function 
       gameOver: false,
     }),
   ).toBe(false);
+
+  expect(
+    isValidGameState({
+      board: validBoard,
+      firstClick: false,
+      gameOver: true,
+    }),
+  ).toBe(false);
+});
+
+test('тест 7: рекурсивное открытие пустых клеток', function () {
+  let testBoard = createBoardModel();
+  testBoard[0][0].isMine = true;
+  countNeighborMinesModel(testBoard);
+
+  openCellModel(testBoard, 8, 8);
+
+  expect(testBoard[8][8].isOpened).toBe(true);
+  expect(testBoard[5][5].isOpened).toBe(true);
+  expect(testBoard[0][0].isOpened).toBe(false);
 });

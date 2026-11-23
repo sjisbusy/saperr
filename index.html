@@ -8,8 +8,17 @@
   </head>
   <body>
     <div id="menu">
+      <input
+        type="text"
+        id="player-name"
+        placeholder="Имя игрока"
+        maxlength="15"
+        autocomplete="off"
+      />
       <button id="reset-btn">Новая Игра</button>
-      <div id="mines-counter">Флаги: <span id="counter-val">0</span>/10</div>
+      <div id="mines-counter">
+        Флаги: <span id="counter-val">0</span>/<span id="max-mines"></span>
+      </div>
       <button id="sound-btn" title="включить/выключить звук">🔊</button>
     </div>
     <div id="game-board"></div>

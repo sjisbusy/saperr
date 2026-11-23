@@ -5,6 +5,9 @@ import {
   createBoardModel,
   generateMinesModel,
   countNeighborMinesModel,
+  openCellModel,
+  countFlagsModel,
+  toggleFlagModel,
   checkWinModel,
   isValidGameState,
 } from './game-logic.js';
@@ -15,6 +18,7 @@ import {
   playExplosionSound,
   playWinSound,
   toggleMute,
+  getMuted,
   playRevealAreaSound,
   playButtonSound,
   playConfirmLossSound,
@@ -24,11 +28,16 @@ let board = [];
 let firstClick = false;
 let gameOver = false;
 
+const maxMinesEl = document.getElementById('max-mines');
+if (maxMinesEl) {
+  maxMinesEl.innerText = MINE_COUNT;
+}
+
 function createBoard() {
   board = createBoardModel();
 }
 
-function renderBoard() {
+function renderBoard(isReset = false) {
   const boardContainer = document.getElementById('game-board');
   boardContainer.innerHTML = '';
   for (let rw = 0; rw < BOARD_SIZE; rw++) {
@@ -56,6 +65,27 @@ function renderBoard() {
       boardContainer.appendChild(kletDiv);
     }
   }
+
+  document.body.classList.remove('game-over-effect', 'game-win-effect');
+  if (gameOver) {
+    const hitMine = board.some((row) =>
+      row.some((cell) => cell.isMine && cell.isOpened),
+    );
+    if (hitMine) {
+      document.body.classList.add('game-over-effect');
+    } else {
+      document.body.classList.add('game-win-effect');
+    }
+  }
+
+  if (isReset) {
+    document.body.classList.add('reset-flash-effect');
+    setTimeout(() => {
+      document.body.classList.remove('reset-flash-effect');
+    }, 200);
+  }
+
+  updateMinesCounter();
 }
 
 function handleLeftClick(evnt) {
@@ -64,75 +94,35 @@ function handleLeftClick(evnt) {
   const target = evnt.target;
   if (!target.classList.contains('klet')) return;
 
-  const rw = parseInt(target.dataset.row);
-  const col = parseInt(target.dataset.col);
-  console.log('Клинк по ячейке', rw, col);
+  const rw = parseInt(target.dataset.row, 10);
+  const col = parseInt(target.dataset.col, 10);
+  if (Number.isNaN(rw) || Number.isNaN(col)) return;
+
+  if (board[rw][col].isOpened || board[rw][col].isFlagged) return;
 
   if (!firstClick) {
     firstClick = true;
     generateMinesModel(board, rw, col);
   }
 
-  if (
-    !board[rw][col].isOpened &&
-    !board[rw][col].isFlagged &&
-    !board[rw][col].isMine
-  ) {
-    if (board[rw][col].neighborMines === 0) {
-      playRevealAreaSound();
-    } else {
-      playClickSound();
-    }
-  }
-  openKlet(rw, col);
-}
+  openCellModel(board, rw, col);
 
-function openKlet(r, c) {
-  if (board[r][c].isOpened || board[r][c].isFlagged) return;
-
-  board[r][c].isOpened = true;
-
-  const kletDiv = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-  kletDiv.classList.add('opened');
-
-  if (board[r][c].isMine) {
-    if (kletDiv) {
-      kletDiv.innerText = '💣';
-      kletDiv.style.backgroundColor = '#e74c3c';
-    }
+  if (board[rw][col].isMine) {
     gameOver = true;
     playExplosionSound();
-    document.body.classList.add('game-over-effect');
+    renderBoard();
     setTimeout(() => {
       alert('💣💣💣! ВЫ ПРОИГРАЛИ !💣💣💣');
       playConfirmLossSound();
     }, 150);
   } else {
-    if (board[r][c].neighborMines > 0) {
-      kletDiv.innerText = board[r][c].neighborMines;
-      kletDiv.dataset.mines = board[r][c].neighborMines;
+    if (board[rw][col].neighborMines === 0) {
+      playRevealAreaSound();
     } else {
-      if (kletDiv) kletDiv.innerText = '';
-
-      for (let i = -1; i <= 1; i++) {
-        for (let j = -1; j <= 1; j++) {
-          let neighborRow = r + i;
-          let neighborCol = c + j;
-
-          if (
-            neighborRow >= 0 &&
-            neighborRow < BOARD_SIZE &&
-            neighborCol >= 0 &&
-            neighborCol < BOARD_SIZE
-          ) {
-            openKlet(neighborRow, neighborCol);
-          }
-        }
-      }
+      playClickSound();
     }
-  }
-  if (!gameOver) {
     checkWin();
+    renderBoard();
   }
 
   saveGame();
@@ -144,18 +134,8 @@ function resetGame() {
   firstClick = false;
   gameOver = false;
 
-  document.body.classList.add('reset-flash-effect');
-
   createBoard();
-  renderBoard();
-  document.body.classList.remove('game-over-effect');
-  document.body.classList.remove('game-win-effect');
-
-  setTimeout(() => {
-    document.body.classList.remove('reset-flash-effect');
-  }, 200);
-
-  updateMinesCounter();
+  renderBoard(true);
 
   try {
     localStorage.removeItem('minesweeper_save');
@@ -172,33 +152,31 @@ function handleRightClick(evnt) {
   const target = evnt.target;
   if (!target.classList.contains('klet')) return;
 
-  const rw = parseInt(target.dataset.row);
-  const col = parseInt(target.dataset.col);
+  const rw = parseInt(target.dataset.row, 10);
+  const col = parseInt(target.dataset.col, 10);
+  if (Number.isNaN(rw) || Number.isNaN(col)) return;
 
-  if (board[rw][col].isOpened) return;
+  const changed = toggleFlagModel(board, rw, col);
+  if (!changed) return;
 
-  if (!board[rw][col].isFlagged) {
-    let currentFlags = 0;
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        if (board[r][c].isFlagged) currentFlags++;
-      }
-    }
-    if (currentFlags >= MINE_COUNT) {
-      return;
-    }
-  }
-
-  board[rw][col].isFlagged = !board[rw][col].isFlagged;
   playFlagSound();
-
-  if (board[rw][col].isFlagged) {
-    target.innerText = '🚩';
-  } else {
-    target.innerText = '';
-  }
-  updateMinesCounter();
+  renderBoard();
   saveGame();
+}
+
+function updateSoundIcon() {
+  const soundBtn = document.getElementById('sound-btn');
+  if (soundBtn) {
+    soundBtn.innerText = getMuted() ? '🔇' : '🔊';
+  }
+}
+
+function handleSoundToggle() {
+  const muted = toggleMute();
+  if (!muted) {
+    playButtonSound();
+  }
+  updateSoundIcon();
 }
 
 function checkWin() {
@@ -206,28 +184,20 @@ function checkWin() {
   if (!isWin) return;
 
   gameOver = true;
-  document.body.classList.add('game-win-effect');
 
   confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
   playWinSound();
 
   setTimeout(() => {
     alert('🎉🎉🎉! ВЫ ПОБЕДИЛИ !🎉🎉🎉');
-  }, 150);
+  }, 500);
 }
 
 function updateMinesCounter() {
-  let flaggedCount = 0;
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board[r][c].isFlagged) {
-        flaggedCount++;
-      }
-    }
-  }
-  const counterEl = document.getElementById('mines-counter');
-  if (counterEl) {
-    counterEl.innerHTML = `Флаги: <span id="counter-val">${flaggedCount}</span>/${MINE_COUNT}`;
+  const flaggedCount = countFlagsModel(board);
+  const counterVal = document.getElementById('counter-val');
+  if (counterVal) {
+    counterVal.innerText = flaggedCount;
   }
 }
 
@@ -264,36 +234,53 @@ function loadGame() {
     gameOver = gameState.gameOver;
 
     renderBoard();
-
-    if (gameOver) {
-      const hitMine = board.some((row) =>
-        row.some((cell) => cell.isMine && cell.isOpened),
-      );
-      if (hitMine) document.body.classList.add('game-over-effect');
-      else document.body.classList.add('game-win-effect');
-    }
-    updateMinesCounter();
   } catch (error) {
     console.warn('!сохранение было повреждено! запускаем новую игру..', error);
-    localStorage.removeItem('minesweeper_save');
+    try {
+      localStorage.removeItem('minesweeper_save');
+    } catch (removeError) {
+      console.warn('не удалось удалить повреждённое сохранение:', removeError);
+    }
     createBoard();
     renderBoard();
-    updateMinesCounter();
   }
 }
 
-const soundBtn = document.getElementById('sound-btn');
-if (soundBtn) {
-  soundBtn.addEventListener('click', () => {
-    const muted = toggleMute();
-    soundBtn.innerText = muted ? '🔇' : '🔊';
-    if (!muted) {
-      playButtonSound();
+const nameInput = document.getElementById('player-name');
+const PLAYER_NAME_KEY = 'minesweeper_player_name';
+
+if (nameInput) {
+  try {
+    const savedName = localStorage.getItem(PLAYER_NAME_KEY);
+    if (savedName) {
+      nameInput.value = savedName;
+    }
+  } catch (e) {
+    console.warn('Не удалось загрузить имя', e);
+  }
+
+  nameInput.addEventListener('input', (e) => {
+    try {
+      const cleanName = e.target.value.trim().substring(0, 15);
+      if (cleanName) {
+        localStorage.setItem(PLAYER_NAME_KEY, cleanName);
+      } else {
+        localStorage.removeItem(PLAYER_NAME_KEY);
+      }
+    } catch (err) {
+      console.warn('Не удалось сохранить имя', err);
+    }
+  });
+
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      nameInput.blur();
     }
   });
 }
 
 loadGame();
+updateSoundIcon();
 document
   .getElementById('game-board')
   .addEventListener('click', handleLeftClick);
@@ -301,3 +288,7 @@ document.getElementById('reset-btn').addEventListener('click', resetGame);
 document
   .getElementById('game-board')
   .addEventListener('contextmenu', handleRightClick);
+const soundBtn = document.getElementById('sound-btn');
+if (soundBtn) {
+  soundBtn.addEventListener('click', handleSoundToggle);
+}

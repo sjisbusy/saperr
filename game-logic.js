@@ -59,6 +59,47 @@ export function countNeighborMinesModel(board) {
   }
 }
 
+export function openCellModel(board, r, c) {
+  if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return;
+  if (board[r][c].isOpened || board[r][c].isFlagged) return;
+
+  board[r][c].isOpened = true;
+
+  if (!board[r][c].isMine && board[r][c].neighborMines === 0) {
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        openCellModel(board, r + i, c + j);
+      }
+    }
+  }
+}
+
+export function countFlagsModel(board) {
+  let count = 0;
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (board[r][c].isFlagged) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+export function toggleFlagModel(board, r, c) {
+  if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return false;
+  if (board[r][c].isOpened) return false;
+
+  if (!board[r][c].isFlagged) {
+    if (countFlagsModel(board) >= MINE_COUNT) {
+      return false;
+    }
+  }
+
+  board[r][c].isFlagged = !board[r][c].isFlagged;
+  return true;
+}
+
 export function checkWinModel(board) {
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
@@ -75,6 +116,10 @@ export function isValidGameState(state) {
     return false;
   }
 
+  if (Object.getPrototypeOf(state) !== Object.prototype) {
+    return false;
+  }
+
   const stateKeys = Object.keys(state);
   if (stateKeys.length !== 3) {
     return false;
@@ -87,12 +132,18 @@ export function isValidGameState(state) {
     return false;
   }
 
+  if (!state.firstClick && state.gameOver) {
+    return false;
+  }
+
   if (!Array.isArray(state.board) || state.board.length !== BOARD_SIZE) {
     return false;
   }
 
   let minesCount = 0;
   let flagsCount = 0;
+  let openedCount = 0;
+  let explodedMinesCount = 0;
 
   for (let r = 0; r < BOARD_SIZE; r++) {
     if (
@@ -105,6 +156,10 @@ export function isValidGameState(state) {
     for (let c = 0; c < BOARD_SIZE; c++) {
       const cell = state.board[r][c];
       if (!cell || typeof cell !== 'object' || Array.isArray(cell)) {
+        return false;
+      }
+
+      if (Object.getPrototypeOf(cell) !== Object.prototype) {
         return false;
       }
 
@@ -138,8 +193,15 @@ export function isValidGameState(state) {
         return false;
       }
 
-      if (cell.isMine) minesCount++;
+      if (cell.isMine) {
+        minesCount++;
+        if (cell.isOpened) explodedMinesCount++;
+      }
       if (cell.isFlagged) flagsCount++;
+
+      if (cell.isOpened) {
+        openedCount++;
+      }
     }
   }
 
@@ -147,7 +209,15 @@ export function isValidGameState(state) {
     return false;
   }
 
+  if (explodedMinesCount > 1) {
+    return false;
+  }
+
   if (state.firstClick && minesCount !== MINE_COUNT) {
+    return false;
+  }
+
+  if (state.firstClick && openedCount === 0) {
     return false;
   }
 
@@ -155,7 +225,84 @@ export function isValidGameState(state) {
     return false;
   }
 
-  if (!state.gameOver && checkWinModel(state.board)) {
+  if (state.firstClick) {
+    let hasSafeZone = false;
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        if (state.board[r][c].isOpened && !state.board[r][c].isMine) {
+          let minesAround = 0;
+          for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+              const nr = r + i;
+              const nc = c + j;
+              if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                if (state.board[nr][nc].isMine) minesAround++;
+              }
+            }
+          }
+          if (minesAround === 0) {
+            hasSafeZone = true;
+            break;
+          }
+        }
+      }
+      if (hasSafeZone) break;
+    }
+  }
+
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const cell = state.board[r][c];
+      if (!cell.isMine) {
+        let actualMines = 0;
+        for (let i = -1; i <= 1; i++) {
+          for (let j = -1; j <= 1; j++) {
+            const nr = r + i;
+            const nc = c + j;
+            if (
+              nr >= 0 &&
+              nr < BOARD_SIZE &&
+              nc >= 0 &&
+              nc < BOARD_SIZE &&
+              state.board[nr][nc].isMine
+            ) {
+              actualMines++;
+            }
+          }
+        }
+
+        if (cell.neighborMines !== actualMines) {
+          return false;
+        }
+
+        if (cell.isOpened && !cell.isMine && cell.neighborMines === 0) {
+          for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+              const nr = r + i;
+              const nc = c + j;
+              if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                const neighbor = state.board[nr][nc];
+                if (
+                  !neighbor.isOpened &&
+                  !neighbor.isFlagged &&
+                  !neighbor.isMine
+                ) {
+                  return false;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const isWin = checkWinModel(state.board);
+  if (!state.gameOver && isWin) {
+    return false;
+  }
+
+  if (state.gameOver && explodedMinesCount === 0 && !isWin) {
     return false;
   }
 

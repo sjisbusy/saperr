@@ -33,7 +33,9 @@ function playTone(frequency, type, duration, volume = 0.1) {
 
     osc.start();
     osc.stop(ctx.currentTime + duration);
-  } catch (e) {}
+  } catch (error) {
+    console.warn('Не удалось воспроизвести звук:', error);
+  }
 }
 
 export function playClickSound() {
@@ -81,7 +83,9 @@ export function playRevealAreaSound() {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.65);
-  } catch (e) {}
+  } catch (error) {
+    console.warn('Не удалось воспроизвести звук:', error);
+  }
 }
 
 export function playButtonSound() {
@@ -91,4 +95,8 @@ export function playButtonSound() {
 export function playConfirmLossSound() {
   playTone(220, 'triangle', 0.08, 0.5);
   setTimeout(() => playTone(165, 'triangle', 0.14, 0.5), 70);
+}
+
+export function getMuted() {
+  return isMuted;
 }
